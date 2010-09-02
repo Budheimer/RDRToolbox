@@ -1,0 +1,246 @@
+%\VignetteIndexEntry{A package for nonlinear dimension reduction with Isomap and LLE.}
+%\VignetteDepends{}
+%\VignetteKeywords{}
+%\VignettePackage{RDRToolbox}
+
+\documentclass[10pt]{article}
+
+\usepackage{times}
+\usepackage{hyperref}
+
+\textwidth=6.2in
+\textheight=8.5in
+\oddsidemargin=.1in
+\evensidemargin=.1in
+\headheight=-.3in
+
+\newcommand{\Rfunction}[1]{{\texttt{#1}}}
+\newcommand{\Robject}[1]{{\texttt{#1}}}
+\newcommand{\Rpackage}[1]{{\textit{#1}}}
+\newcommand{\Rmethod}[1]{{\texttt{#1}}}
+\newcommand{\Rfunarg}[1]{{\texttt{#1}}}
+\newcommand{\Rclass}[1]{{\textit{#1}}}
+\newcommand{\Rcode}[1]{{\texttt{#1}}}
+
+\SweaveOpts{prefix.string=RDRToolbox}
+
+\begin{document}
+
+\title{RDRToolbox \\ A package for nonlinear dimension reduction with Isomap and LLE.}
+\author{Christoph Bartenhagen}
+\date{\today}
+
+\maketitle
+
+\tableofcontents
+
+<<echo=FALSE>>=
+options(width=60)
+options(continue=" ")
+set.seed(1234)
+@
+
+
+\section{Introduction}
+High-dimensional data, like for example microarray gene expression data, can often be reduced to only a few significant features without losing important information. Dimension reduction methods perform a mapping between an original high-dimensional input space and a target space of lower dimensionality. A `good' dimension reduction technique should preserve most of the significant information and generate data with similar characteristics like the high-dimensional original. For example, clusters should also be found within the reduced data, preferably more distinct. \\
+This package provides the Isomap and Locally Linear Embedding algorithm for nonlinear dimension reduction. Nonlinear means in this case, that the methods were designed with respect to data lying on or near a nonlinear submanifold in the higher dimensional input space and perform a nonlinear mapping.\\
+Further, both algorithms belong to the so called feature extraction methods, which in contrast to feature selection methods combine the information from all features. These approaches are often most suited for low-dimensional representations of the whole data. \\
+For cluster validation purposes, the package also includes a routine for computing the Davis-Bouldin-Index.\\
+Further, a plotting tool visualizes two and three dimensional data and, where appropriate, its clusters. \\
+For testing, the well known Swiss Roll dataset can be computed and a data generator simulates microarray gene expression data of a given (high) dimensionality.
+
+\subsection{Loading the package}
+The package can be loaded into R by typing 
+<<preliminaries>>=
+library(RDRToolbox)
+@
+into the R console. To create three dimensional plots, the toolbox requires the package \Rpackage{rgl}. Otherwise, only two dimensional plots will be available. Furthermore, the package \Rpackage{MASS} has to be installed for gene expression data simulation (see section \ref{sec:SimData}).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%___Datasets___%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Datasets}
+In general, the dimension reduction, cluster validation and plot functions in this toolbox expect the data as $N \times D$ matrix, where $N$ is the number of samples and $D$ the dimension of the input data (number of features). After processing, the data is returned as $N \times d$ matrix, for a given target dimensionality $d$ ($d < D$).\\
+But before describing the dimension reduction methods, this section shortly covers two ways of generating a dataset.
+\subsection{Swiss Roll}
+The function \Rfunction{SwissRoll} computes and plots the three dimensional Swiss Roll dataset of a given size \Rfunarg{N} and \Rfunarg{Height}. If desired, it uses the package \Rpackage{rgl} to visualize the Swiss Roll as a rotatable 3D scatterplot. \\
+The following example computes and plots a Swiss Roll dataset containing 1.000 samples (argument \Rfunarg{Height} set to 30 by default):
+<<eval=FALSE>>=
+swissData=SwissRoll(N = 1000, Plot=TRUE)
+@
+See figure \ref{fig:SwissRoll} below for the plot.
+\begin{figure}[h]
+  \centerline{\includegraphics[width=8cm]{SwissRoll.pdf}}
+  \caption{The three dimensional SwissRoll dataset.}
+  \label{fig:SwissRoll}
+\end{figure}
+
+\subsection{Simulating microarray gene expression data}\label{sec:SimData}
+The function \Rfunction{generateData} is a simulator for gene expression data, whose values are normally distributed values with zero mean. The covariance structure is given by a configurable block-diagonal matrix. To simulate differential gene expression between the samples, the expression of a given number of features (parameter \Rfunarg{diffgenes}) of some of the samples will be increased by adding a given factor \Rfunarg{diff} (0.6 by default). The parameter \Rfunarg{diffsamples} controls how many samples have higher expression values compared to the rest (by default, the values of half of the total number of samples will be increased). \\
+The simulator generates two labelled classes:
+\begin{description}
+  \item{label 1:} samples with differentially expressed genes. 
+  \item{label -1:} samples without differentially expressed genes.
+\end{description}  
+Finally, \Rfunction{generateData} returns a list containing the data and its class labels.\\
+
+The following example computes a \Rfunarg{dim}=1.000 dimensional dataset where 10 of 20 samples contain \Rfunarg{diffgenes}=100 differential features:
+<<>>=
+sim = generateData(samples=20, genes=1000, diffgenes=100, diffsamples=10)
+simData = sim[[1]]
+simLabels = sim[[2]]
+@ 
+The covariance can be modified using the arguments \Rfunarg{cov1}, \Rfunarg{cov2}, to set the covariance within and between the blocks of size \Rfunarg{blocksize} $\times$ \Rfunarg{blocksize} of the block-diagonal matrix:
+<<>>=
+sim = generateData(samples=20, genes=1000, diffgenes=100, cov1=0.2, cov2=0, blocksize=10)
+simData = sim[[1]]
+simLabels = sim[[2]]
+@ 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%___Dimension reduction___%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Dimension Reduction}
+
+\subsection{Locally Linear Embedding} 
+Locally Linear Embedding (LLE) was introduced in 2000 by Roweis, Saul and Lawrence \cite{Roweis1,Roweis2}. It preserves local properties of the data by representing each sample in the data by a linear combination of its $k$ nearest neighbours with each neighbour weighted independently. LLE finally chooses the low-dimensional representation that best preserves the weights in the target space.\\
+
+The function \Rfunction{LLE} performs this dimension reduction for a given dimension \Rfunarg{dim} and neighbours \Rfunarg{k}. \\
+The following examples compute a two and a three dimensional LLE embedding of the simulated 1.000 dimensional dataset seen in the example in section \ref{sec:SimData} using \Rfunarg{k}=10 and 5 neighbours:
+<<>>=
+simData_dim3_lle = LLE(data=simData, dim=3, k=10)
+head(simData_dim3_lle)
+simData_dim2_lle = LLE(data=simData, dim=2, k=5)
+head(simData_dim2_lle)
+@ 
+\subsection{Isomap}
+Isomap (IM) is a nonlinear dimension reduction technique presented by Tenenbaum, Silva and Langford in 2000 \cite{Silva,Tenenbaum}. In contrast to LLE, it preserves global properties of the data. That means, that geodesic distances between all samples are captured best in the low dimensional embedding. This implementation uses Floyd's Algorithm to compute the neighbourhood graph of shortest distances, when calculating the geodesic distances. \\
+
+The function \Rfunction{Isomap} performs this dimension reduction for a given vector of dimensions \Rfunarg{dims} and neighbours \Rfunarg{k}. It returns a list of low-dimensional datasets according to the given dimensions.\\
+
+The following example computes a two dimensional Isomap embedding of the simulated 1.000 dimensional dataset seen in the example in section \ref{sec:SimData} using \Rfunarg{k}=10 neighbours:
+<<>>=
+simData_dim2_IM = Isomap(data=simData, dims=2, k=10)
+head(simData_dim2_IM$dim2)
+@ 
+Setting the argument \Rfunarg{plotResiduals} to \Rcode{TRUE}, \Rfunction{Isomap} shows a plot with the residuals between the high- and the low-dimensional data (here, for target dimensions 1-10). It can help estimating the intrinsic dimension of the data: 
+\begin{center}
+<<fig=TRUE,eps=FALSE,pdf=TRUE,width=5,height=4>>=
+simData_dim1to10_IM = Isomap(data=simData, dims=1:10, k=10, plotResiduals=TRUE) 
+@ 
+\end{center}
+This implementation further includes a modified version of the original Isomap algorithm, which respects nearest and farthest neighbours. The next call of \Rfunction{Isomap} varies the upper example by setting the argument \Rfunarg{mod}:
+<<eval=FALSE>>=
+Isomap(data=simData, dims=2, mod=TRUE, k=10)
+@ 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%___Plotting___%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Plotting}\label{sec:plotting}
+The function \Rfunction{plotDR} creates two and three dimensional plots of (labelled) data. It uses the library \Rpackage{rgl} for rotatable 3D scatterplots. The data points are coloured according to given class labels (max. six classes when using default colours).  A legend will be printed in the R console by default. The parameter \Rfunarg{legend} or the R command \Rcode{legend} can be used to add a legend to a two dimensional plot (a legend for three dimensional plots is not supported).\\
+
+The first example plots the two dimensional embedding of the artificial dataset from section \ref{sec:SimData}:
+\begin{center}
+<<fig=TRUE,eps=FALSE,pdf=TRUE,width=8,height=7>>=
+plotDR(data=simData_dim2_lle, labels=simLabels)
+@ 
+\end{center}
+By specifying the arguments \Rfunarg{axesLabels} and \Rfunarg{text}, labels for the axes and for each data point (sample) respectively can be added to the plot:
+\begin{center}
+<<fig=TRUE,eps=FALSE,pdf=TRUE,width=8,height=7>>=
+samples = c(rep("class 1", 10), rep("class 2", 10)) #letters[1:20]
+labels = c("first component", "second component")
+plotDR(data=simData_dim2_lle, labels=simLabels, axesLabels=labels, text=samples)
+@ 
+\end{center}
+A plot of a three dimensional LLE embedding of a 1.000 dimensional dataset is given by
+<<eval=FALSE>>=
+plotDR(data=simData_dim3_lle, labels=simLabels)
+@ 
+\begin{figure}[h]
+  \centerline{\includegraphics[width=8cm]{plot3D.pdf}}
+  \caption{Three dimensional simulated microarray dataset (reduced from formerly 1.000 dimensions by LLE)}
+  \label{fig:lle}
+\end{figure}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%___Cluster distances___%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Cluster distances}
+The function \Rfunction{DBIndex} computes the Davis-Bouldin-Index (DB-Index) for cluster validation purposes. \\
+The index relates the compactness of each cluster to their distance: To compute a clusters' compactness, this version uses the Euclidean distance to determine the mean distances between the samples and the cluster centres. The distance of two clusters is given by the distance of their centres. The smaller the index the better. Values close to 1 or smaller indicate well separated clusters.\\
+
+The following example computes the DB-Index of a 50 dimensional dataset with 20 samples separated into two classes/clusters:
+<<>>=
+d = generateData(samples=20, genes=50, diffgenes=10, blocksize=5)
+DBIndex(data=d[[1]], labels=d[[2]])
+@ 
+As the two dimensional plots in section \ref{sec:plotting} anticipated, the low-dimensional LLE dataset has quite well separated clusters. Accordingly, the DB-Index is low:
+<<>>=
+DBIndex(data=simData_dim2_lle, labels=simLabels)
+@ 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%___Golub Example___%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Example}
+This section demonstrates the dimension reduction workflow for the publicly available the Golub et al. leukemia dataset. \\
+The data is available as R package and can be loaded via
+<<>>=
+library(golubEsets)
+data(Golub_Merge)
+@ 
+The dataset consists of 72 samples, divided into 47 ALL and 25 AML patients, and 7129 expression values. In this example, we compute a two dimensional LLE and Isomap embedding and plot the results. \\ \\
+At first, we extract the features and class labels:
+<<>>=
+golubExprs = t(exprs(Golub_Merge))
+labels = pData(Golub_Merge)$ALL.AML
+dim(golubExprs)
+show(labels)
+@ 
+\begin{center}
+The residual variance of Isomap can be used to estimate the intrinsic dimension of the dataset:
+<<results=hide,fig=TRUE,eps=FALSE,pdf=TRUE,width=5,height=4>>=
+Isomap(data=golubExprs, dims=1:10, plotResiduals=TRUE, k=5)
+@ 
+\end{center}
+Regarding the dimensions for which the residual variances stop to decrease significantly, we can expect a low intrinsic dimension of two or three and therefore, a visualization true to the structure of the original data.\\ \\
+Next, we compute the LLE and Isomap embedding for two target dimensions:
+<<>>=
+golubIsomap = Isomap(data=golubExprs, dims=2, k=5)
+golubLLE = LLE(data=golubExprs, dim=2, k=5)
+@ 
+The Davis-Bouldin-Index shows, that the ALL and AML patients are well separated into two clusters:
+<<>>=
+DBIndex(data=golubIsomap$dim2, labels=labels)
+DBIndex(data=golubLLE, labels=labels)
+@ 
+Finally, we use \Rfunction{plotDR} to plot the two dimensional data:
+<<eval=TRUE, label=plotGolubIsomap, fig=TRUE, include=FALSE, eps=FALSE, pdf=TRUE>>=
+plotDR(data=golubIsomap$dim2, labels=labels, axesLabels=c("", ""), legend=TRUE)
+title(main="Isomap")
+@ 
+<<eval=TRUE, label=plotGolubLLE, fig=TRUE, include=FALSE, eps=FALSE, pdf=TRUE>>=
+plotDR(data=golubLLE, labels=labels, axesLabels=c("", ""), legend=TRUE)
+title(main="LLE")
+@ 
+\begin{figure}[h]
+  \begin{minipage}{8cm}
+    \begin{center}
+      \includegraphics[width=8cm]{RDRToolbox-plotGolubIsomap}
+    \end{center}
+  \end{minipage}
+  \begin{minipage}{8cm}
+    \begin{center}
+      \includegraphics[width=8cm]{RDRToolbox-plotGolubLLE}
+    \end{center}
+  \end{minipage}
+  \caption{Two dimensional embedding of the Golub et al. leukemia dataset (Left: Isomap; Right: LLE).}
+\end{figure}
+Both visualizations, using either Isomap or LLE, show distinct clusters of ALL and AML patients, although the cluster overlap less in the Isomap embedding. This is consistent with the DB-Index, which is very low for both methods, but slightly higher for LLE. \\ \\
+A three dimensional visualization can be generated in the same manner and is best analyzed interactively within R.
+
+\bibliographystyle{abbrv}
+\bibliography{vignette}
+
+\end{document}

@@ -1,0 +1,15 @@
+importMethodsFrom(methods, show)
+
+importFrom(graphics, plot)
+
+importFrom(MASS, mvrnorm)
+
+importFrom(rgl, plot3d, text3d)
+
+importFrom(grDevices, rainbow)
+
+importFrom(stats, cor, runif)
+
+export(
+	Isomap, LLE, generateData, plotDR, SwissRoll, DBIndex
+)
