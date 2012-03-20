@@ -105,7 +105,7 @@ plotDR = function(data, labels, axesLabels=c("x","y","z"), legend=FALSE, text, c
 			plot3d(data,type="s",size=1,col=plot_colours,xlab=axesLabels[1],ylab=axesLabels[2],zlab=axesLabels[3], ...)
 		else{
 			plot3d(data,type="n",xlab=axesLabels[1],ylab=axesLabels[2],zlab=axesLabels[3], ...)
-			text3d(data,text=text,color=plot_colours, ...)
+			text3d(data,texts=text,color=plot_colours, ...)
 		}
 
 	## display a legend for the plot (just in console; 3D plot not capable of displaying a legend)
