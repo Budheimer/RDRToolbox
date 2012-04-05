@@ -52,9 +52,7 @@ plotDR(data=d_low, labels=d[[2]])
 ## plot a three dimensional LLE embedding of a 1.000 dimensional dataset
 d = generateData(samples=20, genes=1000, diffgenes=100, blocksize=10)
 d_low = LLE(data=d[[1]], dim=3, k=5)
-\dontrun{
 plotDR(data=d_low, labels=d[[2]])
-}
 
 ## plot a two dimensional LLE embedding of a 1.000 dimensional dataset
 ## add axis labels, a legend and plot a text for each sample
